@@ -1,45 +1,80 @@
-# RDS Module
+# GCP Cloud SQL Module
 
-resource "aws_db_subnet_group" "main" {
-  name       = "${var.environment}-db-subnet-group"
-  subnet_ids = var.subnet_ids
+# Cloud SQL Instance
+resource "google_sql_database_instance" "main" {
+  name             = "${var.environment}-mysql-instance"
+  database_version = "MYSQL_8_0"
+  region           = var.region
 
-  tags = {
-    Name        = "${var.environment}-db-subnet-group"
-    Environment = var.environment
+  settings {
+    tier              = var.instance_tier
+    availability_type = "REGIONAL"
+
+    database_flags {
+      name  = "character_set_server"
+      value = "utf8mb4"
+    }
+
+    ip_configuration {
+      require_ssl        = true
+      private_network    = var.network_id
+      enable_ipv4        = false
+      ipv4_enabled       = false
+      authorized_networks = []
+    }
+
+    backup_configuration {
+      enabled                        = true
+      point_in_time_recovery_enabled = true
+      backup_retention_settings {
+        retained_backups = 30
+        retention_unit   = "COUNT"
+      }
+    }
+
+    maintenance_window {
+      day          = 7  # Sunday
+      hour         = 3
+      update_track = "stable"
+    }
+
+    insights_config {
+      query_insights_enabled  = true
+      query_plans_per_minute  = 5
+      query_string_length     = 1024
+      record_application_tags = true
+      record_client_address   = true
+    }
+  }
+
+  deletion_protection = true
+
+  labels = {
+    environment = var.environment
   }
 }
 
-resource "aws_db_instance" "main" {
-  identifier = "${var.environment}-database"
+# Cloud SQL Database
+resource "google_sql_database" "main" {
+  name     = var.database_name
+  instance = google_sql_database_instance.main.name
 
-  engine         = "mysql"
-  engine_version = "8.0"
-  instance_class = "db.t3.micro"
+  charset   = "utf8mb4"
+  collation = "utf8mb4_unicode_ci"
+}
 
-  allocated_storage     = 20
-  max_allocated_storage = 100
-  storage_type          = "gp2"
-  storage_encrypted     = true
+# Cloud SQL User
+resource "google_sql_user" "main" {
+  name     = var.database_user
+  instance = google_sql_database_instance.main.name
+  password = var.database_password
 
-  db_name  = var.db_name
-  username = var.db_username
-  password = var.db_password
+  type = "BUILT_IN"
+}
 
-  db_subnet_group_name   = aws_db_subnet_group.main.name
-  vpc_security_group_ids = var.security_group_ids
+# Cloud SQL Backup
+resource "google_sql_backup_run" "main" {
+  instance = google_sql_database_instance.main.name
 
-  backup_retention_period = 7
-  backup_window          = "03:00-04:00"
-  maintenance_window     = "sun:04:00-sun:05:00"
-
-  skip_final_snapshot       = true
-  final_snapshot_identifier = "${var.environment}-db-final-snapshot"
-
-  deletion_protection = false
-
-  tags = {
-    Name        = "${var.environment}-database"
-    Environment = var.environment
-  }
+  depends_on = [google_sql_database_instance.main]
 }
