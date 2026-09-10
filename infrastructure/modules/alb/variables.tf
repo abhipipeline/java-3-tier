@@ -1,31 +1,33 @@
-# ALB Module
+# Load Balancer Module - GCP
 
 variable "environment" {
   description = "Environment name"
   type        = string
 }
 
-variable "vpc_id" {
-  description = "VPC ID"
+variable "project_id" {
+  description = "GCP Project ID"
   type        = string
 }
 
-variable "public_subnets" {
-  description = "List of public subnet IDs"
+variable "network" {
+  description = "Network name for firewall rules"
+  type        = string
+}
+
+variable "public_subnet_names" {
+  description = "List of public subnet names"
   type        = list(string)
 }
 
-output "alb_arn" {
-  description = "ALB ARN"
-  value       = aws_lb.main.arn
+variable "health_check_port" {
+  description = "Port for health checks"
+  type        = number
+  default     = 8080
 }
 
-output "alb_dns_name" {
-  description = "ALB DNS name"
-  value       = aws_lb.main.dns_name
-}
-
-output "target_group_arn" {
-  description = "Target group ARN"
-  value       = aws_lb_target_group.main.arn
+variable "health_check_path" {
+  description = "Path for health checks"
+  type        = string
+  default     = "/"
 }
