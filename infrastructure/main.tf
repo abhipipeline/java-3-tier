@@ -1,89 +1,66 @@
-# Main Terraform configuration for AWS infrastructure
-
 terraform {
   required_version = ">= 1.0.0"
   required_providers {
-    aws = {
-      source  = "hashicorp/aws"
+    google = {
+      source  = "hashicorp/google"
       version = "~> 4.0"
     }
   }
-  
-  backend "s3" {
-    # Update these values according to your setup
-    # bucket = "your-terraform-state-bucket"
-    # key    = "java-app/terraform.tfstate"
-    # region = "us-east-1"
+  backend "gcs" {
+    bucket = var.state_bucket
+    prefix = "java-app/terraform.tfstate"
   }
 }
 
-provider "aws" {
-  region = var.aws_region
+provider "google" {
+  project = var.gcp_project
+  region  = var.gcp_region
+  zone    = var.gcp_zone
 }
 
-# VPC Module
-module "vpc" {
-  source = "./modules/vpc"
+# Network
+module "network" {
+  source = "./modules/network"
 
-  environment     = var.environment
-  vpc_cidr       = var.vpc_cidr
-  public_subnets  = var.public_subnets
-  private_subnets = var.private_subnets
-  azs            = var.availability_zones
-}
-
-# Security Module
-module "security" {
-  source = "./modules/security"
-
-  environment             = var.environment
-  vpc_id                 = module.vpc.vpc_id
-  allowed_ssh_cidr_blocks = var.allowed_ssh_cidr_blocks
-}
-
-# RDS Module
-module "rds" {
-  source = "./modules/rds"
-
-  environment         = var.environment
-  vpc_id             = module.vpc.vpc_id
-  subnet_ids         = module.vpc.private_subnet_ids
-  security_group_ids = [module.security.db_security_group_id]
-  db_name            = var.db_name
-  db_username        = var.db_username
-  db_password        = var.db_password
-}
-
-# Application Load Balancer Module
-module "alb" {
-  source = "./modules/alb"
-
-  environment     = var.environment
-  vpc_id         = module.vpc.vpc_id
-  public_subnets = module.vpc.public_subnet_ids
-}
-
-# Auto Scaling Group Module
-module "asg" {
-  source = "./modules/asg"
-
-  environment         = var.environment
-  vpc_id             = module.vpc.vpc_id
-  private_subnet_ids = module.vpc.private_subnet_ids
-  security_group_ids = [module.security.app_security_group_id]
-  target_group_arns  = [module.alb.target_group_arn]
-  instance_type      = var.instance_type
-  key_name           = var.key_name
-  min_size          = var.asg_min_size
-  max_size          = var.asg_max_size
-  desired_capacity  = var.asg_desired_capacity
-}
-
-# CloudWatch Module
-module "monitoring" {
-  source = "./modules/monitoring"
-
+  gcp_project = var.gcp_project
+  gcp_region  = var.gcp_region
   environment = var.environment
-  rds_instance_id = module.rds.rds_instance_id
-  asg_name = module.asg.asg_name
-} 
+  network_name = "${var.environment}-java-app-network"
+}
+
+# GKE Cluster
+module "gke" {
+  source = "./modules/gke"
+
+  gcp_project = var.gcp_project
+  gcp_region  = var.gcp_region
+  gcp_zone    = var.gcp_zone
+  cluster_name = "${var.environment}-java-app-cluster"
+  network      = module.network.network_self_link
+  subnetwork   = module.network.subnetwork_self_link
+
+  node_count   = var.gke_node_count
+  machine_type = var.gke_machine_type
+}
+
+# Cloud SQL (MySQL)
+module "cloudsql" {
+  source = "./modules/cloudsql"
+
+  gcp_project = var.gcp_project
+  gcp_region  = var.gcp_region
+
+  instance_name = "${var.environment}-java-app-sql"
+  db_version = var.db_version
+  db_tier    = var.db_tier
+  db_user    = var.db_username
+  db_password = var.db_password
+}
+
+output "gke_endpoint" {
+  value = module.gke.endpoint
+}
+
+output "cloudsql_connection_name" {
+  value = module.cloudsql.connection_name
+}

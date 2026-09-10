@@ -1,88 +1,59 @@
-variable "aws_region" {
-  description = "AWS region to deploy resources"
+variable "gcp_project" {
+  description = "GCP project ID"
   type        = string
-  default     = "us-east-1"
+}
+
+variable "gcp_region" {
+  description = "GCP region"
+  type        = string
+  default     = "us-central1"
+}
+
+variable "gcp_zone" {
+  description = "GCP zone"
+  type        = string
+  default     = "us-central1-a"
+}
+
+variable "state_bucket" {
+  description = "GCS bucket for Terraform state"
+  type        = string
 }
 
 variable "environment" {
-  description = "Environment name (e.g., dev, prod)"
+  description = "Deployment environment (dev/prod)"
   type        = string
   default     = "dev"
 }
 
-variable "vpc_cidr" {
-  description = "CIDR block for VPC"
-  type        = string
-  default     = "192.168.0.0/16"
+# GKE
+variable "gke_node_count" {
+  type    = number
+  default = 2
 }
 
-variable "public_subnets" {
-  description = "CIDR blocks for public subnets"
-  type        = list(string)
-  default     = ["192.168.1.0/24", "192.168.2.0/24"]
+variable "gke_machine_type" {
+  type    = string
+  default = "e2-medium"
 }
 
-variable "private_subnets" {
-  description = "CIDR blocks for private subnets"
-  type        = list(string)
-  default     = ["192.168.3.0/24", "192.168.4.0/24"]
+# Cloud SQL
+variable "db_version" {
+  type    = string
+  default = "MYSQL_8_0"
 }
 
-variable "availability_zones" {
-  description = "Availability zones"
-  type        = list(string)
-  default     = ["us-east-1a", "us-east-1b"]
-}
-
-variable "db_name" {
-  description = "Name of the database"
-  type        = string
-  default     = "javaapp"
+variable "db_tier" {
+  type    = string
+  default = "db-f1-micro"
 }
 
 variable "db_username" {
-  description = "Database master username"
-  type        = string
-  sensitive   = true
+  type    = string
+  default = "dbuser"
 }
 
 variable "db_password" {
-  description = "Database master password"
-  type        = string
-  sensitive   = true
+  type    = string
+  sensitive = true
 }
-
-variable "instance_type" {
-  description = "EC2 instance type"
-  type        = string
-  default     = "t3.micro"
-}
-
-variable "key_name" {
-  description = "Name of the SSH key pair"
-  type        = string
-}
-
-variable "asg_min_size" {
-  description = "Minimum size of the Auto Scaling Group"
-  type        = number
-  default     = 2
-}
-
-variable "asg_max_size" {
-  description = "Maximum size of the Auto Scaling Group"
-  type        = number
-  default     = 6
-}
-
-variable "asg_desired_capacity" {
-  description = "Desired capacity of the Auto Scaling Group"
-  type        = number
-  default     = 2
-}
-
-variable "allowed_ssh_cidr_blocks" {
-  description = "List of CIDR blocks allowed to SSH to bastion host"
-  type        = list(string)
-  default     = ["0.0.0.0/0"]
-} 

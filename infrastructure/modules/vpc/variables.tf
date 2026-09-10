@@ -3,8 +3,19 @@ variable "environment" {
   type        = string
 }
 
+variable "project_id" {
+  description = "GCP Project ID"
+  type        = string
+}
+
+variable "region" {
+  description = "GCP Region"
+  type        = string
+  default     = "us-central1"
+}
+
 variable "vpc_cidr" {
-  description = "CIDR block for VPC"
+  description = "CIDR block for VPC (for reference, GCP uses subnetwork CIDRs)"
   type        = string
 }
 
@@ -19,6 +30,7 @@ variable "private_subnets" {
 }
 
 variable "azs" {
-  description = "List of availability zones"
+  description = "List of zones (for reference, GCP uses regions and zones)"
   type        = list(string)
-} 
+  default     = []
+}

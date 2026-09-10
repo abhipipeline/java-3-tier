@@ -1,80 +1,217 @@
-# Monitoring Module
+# GCP Cloud Monitoring Module
 
-# CloudWatch Log Group for application logs
-resource "aws_cloudwatch_log_group" "application" {
-  name              = "/aws/ec2/${var.environment}-application"
-  retention_in_days = 14
+# Log Sink for Application Logs
+resource "google_logging_project_sink" "application_logs" {
+  name            = "${var.environment}-application-logs-sink"
+  destination     = "logging.googleapis.com/projects/${var.project_id}/logs/${var.environment}-application"
+  filter          = "resource.type=gce_instance AND resource.labels.instance_id=*"
+  unique_writer_identity = true
+}
 
-  tags = {
-    Name        = "${var.environment}-application-logs"
-    Environment = var.environment
+# Alert Policy - High CPU Utilization on Instances
+resource "google_monitoring_alert_policy" "high_cpu" {
+  display_name = "${var.environment}-high-cpu-alert"
+  combiner     = "OR"
+
+  conditions {
+    display_name = "High CPU Utilization"
+
+    condition_threshold {
+      filter          = "resource.type=gce_instance AND metric.type=compute.googleapis.com/instance/cpu/utilization"
+      duration        = "300s"
+      comparison      = "COMPARISON_GT"
+      threshold_value = 0.8
+
+      aggregations {
+        alignment_period    = "60s"
+        per_series_aligner  = "ALIGN_MEAN"
+      }
+    }
+  }
+
+  notification_channels = var.notification_channels
+
+  labels = {
+    environment = var.environment
   }
 }
 
-# RDS CloudWatch Alarms
-resource "aws_cloudwatch_metric_alarm" "rds_cpu" {
-  alarm_name          = "${var.environment}-rds-high-cpu"
-  comparison_operator = "GreaterThanThreshold"
-  evaluation_periods  = "2"
-  metric_name         = "CPUUtilization"
-  namespace           = "AWS/RDS"
-  period              = "300"
-  statistic           = "Average"
-  threshold           = "80"
-  alarm_description   = "This metric monitors ec2 cpu utilization"
-  alarm_actions       = []
+# Alert Policy - High Memory Usage
+resource "google_monitoring_alert_policy" "high_memory" {
+  display_name = "${var.environment}-high-memory-alert"
+  combiner     = "OR"
 
-  dimensions = {
-    DBInstanceIdentifier = var.rds_instance_id
+  conditions {
+    display_name = "High Memory Usage"
+
+    condition_threshold {
+      filter          = "resource.type=gce_instance AND metric.type=compute.googleapis.com/instance/memory/utilization"
+      duration        = "300s"
+      comparison      = "COMPARISON_GT"
+      threshold_value = 0.85
+
+      aggregations {
+        alignment_period    = "60s"
+        per_series_aligner  = "ALIGN_MEAN"
+      }
+    }
   }
 
-  tags = {
-    Name        = "${var.environment}-rds-cpu-alarm"
-    Environment = var.environment
-  }
-}
+  notification_channels = var.notification_channels
 
-resource "aws_cloudwatch_metric_alarm" "rds_memory" {
-  alarm_name          = "${var.environment}-rds-low-memory"
-  comparison_operator = "LessThanThreshold"
-  evaluation_periods  = "2"
-  metric_name         = "FreeableMemory"
-  namespace           = "AWS/RDS"
-  period              = "300"
-  statistic           = "Average"
-  threshold           = "268435456" # 256MB in bytes
-  alarm_description   = "This metric monitors RDS free memory"
-  alarm_actions       = []
-
-  dimensions = {
-    DBInstanceIdentifier = var.rds_instance_id
-  }
-
-  tags = {
-    Name        = "${var.environment}-rds-memory-alarm"
-    Environment = var.environment
+  labels = {
+    environment = var.environment
   }
 }
 
-# Auto Scaling Group CloudWatch Alarms
-resource "aws_cloudwatch_metric_alarm" "asg_cpu" {
-  alarm_name          = "${var.environment}-asg-high-cpu"
-  comparison_operator = "GreaterThanThreshold"
-  evaluation_periods  = "2"
-  metric_name         = "CPUUtilization"
-  namespace           = "AWS/EC2"
-  period              = "300"
-  statistic           = "Average"
-  threshold           = "70"
-  alarm_description   = "This metric monitors EC2 CPU utilization"
-  alarm_actions       = []
+# Alert Policy - Cloud SQL High CPU
+resource "google_monitoring_alert_policy" "cloudsql_cpu" {
+  display_name = "${var.environment}-cloudsql-high-cpu-alert"
+  combiner     = "OR"
 
-  dimensions = {
-    AutoScalingGroupName = var.asg_name
+  conditions {
+    display_name = "CloudSQL High CPU Utilization"
+
+    condition_threshold {
+      filter          = "resource.type=cloudsql_database AND metric.type=cloudsql.googleapis.com/database/cpu/utilization"
+      duration        = "300s"
+      comparison      = "COMPARISON_GT"
+      threshold_value = 0.8
+
+      aggregations {
+        alignment_period    = "60s"
+        per_series_aligner  = "ALIGN_MEAN"
+      }
+    }
   }
 
-  tags = {
-    Name        = "${var.environment}-asg-cpu-alarm"
-    Environment = var.environment
+  notification_channels = var.notification_channels
+
+  labels = {
+    environment = var.environment
+  }
+}
+
+# Alert Policy - Cloud SQL Low Memory
+resource "google_monitoring_alert_policy" "cloudsql_memory" {
+  display_name = "${var.environment}-cloudsql-low-memory-alert"
+  combiner     = "OR"
+
+  conditions {
+    display_name = "CloudSQL Low Available Memory"
+
+    condition_threshold {
+      filter          = "resource.type=cloudsql_database AND metric.type=cloudsql.googleapis.com/database/memory/utilization"
+      duration        = "300s"
+      comparison      = "COMPARISON_GT"
+      threshold_value = 0.9
+
+      aggregations {
+        alignment_period    = "60s"
+        per_series_aligner  = "ALIGN_MEAN"
+      }
+    }
+  }
+
+  notification_channels = var.notification_channels
+
+  labels = {
+    environment = var.environment
+  }
+}
+
+# Monitoring Dashboard
+resource "google_monitoring_dashboard" "main" {
+  dashboard_json = jsonencode({
+    displayName = "${var.environment}-dashboard"
+    mosaicLayout = {
+      columns = 12
+      tiles = [
+        {
+          width  = 6
+          height = 4
+          widget = {
+            title = "CPU Utilization - Instances"
+            xyChart = {
+              dataSets = [
+                {
+                  timeSeriesQuery = {
+                    timeSeriesFilter = {
+                      filter = "resource.type=gce_instance AND metric.type=compute.googleapis.com/instance/cpu/utilization"
+                    }
+                  }
+                  plotType = "LINE"
+                }
+              ]
+            }
+          }
+        },
+        {
+          xPos   = 6
+          width  = 6
+          height = 4
+          widget = {
+            title = "Memory Utilization - Instances"
+            xyChart = {
+              dataSets = [
+                {
+                  timeSeriesQuery = {
+                    timeSeriesFilter = {
+                      filter = "resource.type=gce_instance AND metric.type=compute.googleapis.com/instance/memory/utilization"
+                    }
+                  }
+                  plotType = "LINE"
+                }
+              ]
+            }
+          }
+        },
+        {
+          yPos   = 4
+          width  = 6
+          height = 4
+          widget = {
+            title = "CloudSQL CPU Utilization"
+            xyChart = {
+              dataSets = [
+                {
+                  timeSeriesQuery = {
+                    timeSeriesFilter = {
+                      filter = "resource.type=cloudsql_database AND metric.type=cloudsql.googleapis.com/database/cpu/utilization"
+                    }
+                  }
+                  plotType = "LINE"
+                }
+              ]
+            }
+          }
+        },
+        {
+          xPos   = 6
+          yPos   = 4
+          width  = 6
+          height = 4
+          widget = {
+            title = "CloudSQL Memory Utilization"
+            xyChart = {
+              dataSets = [
+                {
+                  timeSeriesQuery = {
+                    timeSeriesFilter = {
+                      filter = "resource.type=cloudsql_database AND metric.type=cloudsql.googleapis.com/database/memory/utilization"
+                    }
+                  }
+                  plotType = "LINE"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    }
+  })
+
+  labels = {
+    environment = var.environment
   }
 }

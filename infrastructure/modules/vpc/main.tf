@@ -1,176 +1,130 @@
-# VPC Module
+# VPC Module - GCP Migration
 
-resource "aws_vpc" "main" {
-  cidr_block           = var.vpc_cidr
-  enable_dns_hostnames = true
-  enable_dns_support   = true
-
-  tags = {
-    Name        = "${var.environment}-vpc"
-    Environment = var.environment
+terraform {
+  required_providers {
+    google = {
+      source  = "hashicorp/google"
+      version = "~> 5.0"
+    }
   }
 }
 
-# Internet Gateway
-resource "aws_internet_gateway" "main" {
-  vpc_id = aws_vpc.main.id
+variable "project_id" {
+  description = "GCP Project ID"
+  type        = string
+}
 
-  tags = {
-    Name        = "${var.environment}-igw"
-    Environment = var.environment
-  }
+variable "region" {
+  description = "GCP Region"
+  type        = string
+}
+
+# VPC Network
+resource "google_compute_network" "main" {
+  name                    = "${var.environment}-vpc"
+  auto_create_subnetworks = false
+
+  depends_on = []
 }
 
 # Public Subnets
-resource "aws_subnet" "public" {
+resource "google_compute_subnetwork" "public" {
   count             = length(var.public_subnets)
-  vpc_id            = aws_vpc.main.id
-  cidr_block        = var.public_subnets[count.index]
-  availability_zone = var.azs[count.index]
+  name              = "${var.environment}-public-subnet-${count.index + 1}"
+  ip_cidr_range     = var.public_subnets[count.index]
+  region            = var.region
+  network           = google_compute_network.main.id
+  purpose           = "PRIVATE"
+  private_ip_google_access = false
 
-  map_public_ip_on_launch = true
-
-  tags = {
-    Name        = "${var.environment}-public-subnet-${count.index + 1}"
-    Environment = var.environment
+  log_config {
+    aggregation_interval = "INTERVAL_5_SEC"
   }
 }
 
 # Private Subnets
-resource "aws_subnet" "private" {
+resource "google_compute_subnetwork" "private" {
   count             = length(var.private_subnets)
-  vpc_id            = aws_vpc.main.id
-  cidr_block        = var.private_subnets[count.index]
-  availability_zone = var.azs[count.index]
+  name              = "${var.environment}-private-subnet-${count.index + 1}"
+  ip_cidr_range     = var.private_subnets[count.index]
+  region            = var.region
+  network           = google_compute_network.main.id
+  purpose           = "PRIVATE"
+  private_ip_google_access = true
 
-  tags = {
-    Name        = "${var.environment}-private-subnet-${count.index + 1}"
-    Environment = var.environment
+  log_config {
+    aggregation_interval = "INTERVAL_5_SEC"
   }
 }
 
-# Elastic IP for NAT Gateway
-resource "aws_eip" "nat" {
-  count = length(var.public_subnets)
-  vpc   = true
+# Cloud Router for NAT
+resource "google_compute_router" "main" {
+  name    = "${var.environment}-router"
+  region  = var.region
+  network = google_compute_network.main.id
 
-  tags = {
-    Name        = "${var.environment}-nat-eip-${count.index + 1}"
-    Environment = var.environment
+  bgp {
+    asn = 64514
   }
 }
 
-# NAT Gateway
-resource "aws_nat_gateway" "main" {
-  count         = length(var.public_subnets)
-  allocation_id = aws_eip.nat[count.index].id
-  subnet_id     = aws_subnet.public[count.index].id
+# Cloud NAT Gateway
+resource "google_compute_router_nat" "main" {
+  name                               = "${var.environment}-nat"
+  router                             = google_compute_router.main.name
+  region                             = var.region
+  nat_ip_allocate_option             = "AUTO_ONLY"
+  source_subnetwork_ip_ranges_to_nat = "ALL_SUBNETWORKS_ALL_IP_RANGES"
 
-  tags = {
-    Name        = "${var.environment}-nat-${count.index + 1}"
-    Environment = var.environment
+  log_config {
+    enable = true
+    filter = "ERRORS_ONLY"
   }
 }
 
-# Public Route Table
-resource "aws_route_table" "public" {
-  vpc_id = aws_vpc.main.id
+# Firewall - Allow internal traffic
+resource "google_compute_firewall" "allow_internal" {
+  name      = "${var.environment}-allow-internal"
+  network   = google_compute_network.main.name
+  direction = "INGRESS"
 
-  route {
-    cidr_block = "0.0.0.0/0"
-    gateway_id = aws_internet_gateway.main.id
+  allow {
+    protocol = "tcp"
+    ports    = ["0-65535"]
   }
 
-  tags = {
-    Name        = "${var.environment}-public-rt"
-    Environment = var.environment
+  allow {
+    protocol = "udp"
+    ports    = ["0-65535"]
   }
+
+  allow {
+    protocol = "icmp"
+  }
+
+  source_ranges = concat(var.public_subnets, var.private_subnets)
 }
 
-# Private Route Tables
-resource "aws_route_table" "private" {
-  count  = length(var.private_subnets)
-  vpc_id = aws_vpc.main.id
+# Firewall - Allow SSH from anywhere (adjust as needed)
+resource "google_compute_firewall" "allow_ssh" {
+  name      = "${var.environment}-allow-ssh"
+  network   = google_compute_network.main.name
+  direction = "INGRESS"
 
-  route {
-    cidr_block     = "0.0.0.0/0"
-    nat_gateway_id = aws_nat_gateway.main[count.index].id
+  allow {
+    protocol = "tcp"
+    ports    = ["22"]
   }
 
-  tags = {
-    Name        = "${var.environment}-private-rt-${count.index + 1}"
-    Environment = var.environment
-  }
-}
-
-# Route Table Associations
-resource "aws_route_table_association" "public" {
-  count          = length(var.public_subnets)
-  subnet_id      = aws_subnet.public[count.index].id
-  route_table_id = aws_route_table.public.id
-}
-
-resource "aws_route_table_association" "private" {
-  count          = length(var.private_subnets)
-  subnet_id      = aws_subnet.private[count.index].id
-  route_table_id = aws_route_table.private[count.index].id
+  source_ranges = ["0.0.0.0/0"]
 }
 
 # VPC Flow Logs
-resource "aws_flow_log" "main" {
-  iam_role_arn    = aws_iam_role.flow_log.arn
-  log_destination = aws_cloudwatch_log_group.flow_log.arn
-  traffic_type    = "ALL"
-  vpc_id          = aws_vpc.main.id
+resource "google_logging_project_sink" "vpc_flow_logs" {
+  name        = "${var.environment}-vpc-flow-logs"
+  destination = "logging.googleapis.com/projects/${var.project_id}/logs/vpc-flow-logs"
+
+  filter = "resource.type=\"gce_subnetwork\" OR resource.type=\"gce_network\""
+
+  unique_writer_identity = true
 }
-
-# CloudWatch Log Group for VPC Flow Logs
-resource "aws_cloudwatch_log_group" "flow_log" {
-  name              = "/aws/vpc/${var.environment}-flow-logs"
-  retention_in_days = 30
-
-  tags = {
-    Environment = var.environment
-  }
-}
-
-# IAM Role for VPC Flow Logs
-resource "aws_iam_role" "flow_log" {
-  name = "${var.environment}-vpc-flow-log-role"
-
-  assume_role_policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [
-      {
-        Action = "sts:AssumeRole"
-        Effect = "Allow"
-        Principal = {
-          Service = "vpc-flow-logs.amazonaws.com"
-        }
-      }
-    ]
-  })
-}
-
-# IAM Role Policy for VPC Flow Logs
-resource "aws_iam_role_policy" "flow_log" {
-  name = "${var.environment}-vpc-flow-log-policy"
-  role = aws_iam_role.flow_log.id
-
-  policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [
-      {
-        Effect = "Allow"
-        Action = [
-          "logs:CreateLogGroup",
-          "logs:CreateLogStream",
-          "logs:PutLogEvents",
-          "logs:DescribeLogGroups",
-          "logs:DescribeLogStreams"
-        ]
-        Resource = "*"
-      }
-    ]
-  })
-} 
