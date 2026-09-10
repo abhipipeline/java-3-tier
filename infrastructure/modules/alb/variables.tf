@@ -18,6 +18,7 @@ variable "network" {
 variable "public_subnet_names" {
   description = "List of public subnet names"
   type        = list(string)
+  default     = []
 }
 
 variable "health_check_port" {
