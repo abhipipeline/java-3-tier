@@ -15,11 +15,6 @@ variable "gcp_zone" {
   default     = "us-central1-a"
 }
 
-variable "state_bucket" {
-  description = "GCS bucket for Terraform state"
-  type        = string
-}
-
 variable "environment" {
   description = "Deployment environment (dev/prod)"
   type        = string

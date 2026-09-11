@@ -2,10 +2,11 @@ package com.dpt.demo;
 
 import java.sql.Connection;
 import java.sql.DriverManager;
+import java.sql.PreparedStatement;
 import java.sql.SQLException;
-import java.sql.Statement;
 
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.stereotype.Controller;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestMethod;
@@ -23,6 +24,7 @@ public class register {
 
 	@Value("${spring.datasource.password}")
 	private String DBpassword;
+	private final BCryptPasswordEncoder passwordEncoder = new BCryptPasswordEncoder();
 	
 	
 	@RequestMapping(value = "register", method = RequestMethod.GET)
@@ -37,23 +39,24 @@ public class register {
 	@RequestMapping(value = "register", method = RequestMethod.POST)
 	public ModelAndView register(String firstName,String lastName,String email,String userName,String password) throws ClassNotFoundException
 	{
-		Class.forName("com.mysql.jdbc.Driver");
-		//Add employee here
+		Class.forName("com.mysql.cj.jdbc.Driver");
+		ModelAndView mv = new ModelAndView("register");
 		try (Connection con = DriverManager.getConnection(url, DBusername, DBpassword);
-				Statement st = con.createStatement()) {
+				PreparedStatement st = con.prepareStatement(
+						"insert into Employee (first_name,last_name,email,username,password,regdate) values(?,?,?,?,?,CURDATE())")) {
 
-			String sql = "insert into Employee (first_name,last_name,email,username,password,regdate) values('"+firstName+"','"+lastName+"','"+email+"','"+userName+"','"+password+"',CURDATE());";
-			st.execute(sql);
+			st.setString(1, firstName);
+			st.setString(2, lastName);
+			st.setString(3, email);
+			st.setString(4, userName);
+			st.setString(5, passwordEncoder.encode(password));
+			st.executeUpdate();
+			mv.addObject("message", "user account has been added for " + userName);
 
 		} catch (SQLException ex) {
-
-			ex.printStackTrace();
-
+			mv.addObject("errorMessage", "Unable to create the user account.");
 		}
 				
-		
-		ModelAndView mv=new ModelAndView("register");		
-		mv.addObject("message", "user account has been added for "+userName);
 		return mv;		
 	}
 	

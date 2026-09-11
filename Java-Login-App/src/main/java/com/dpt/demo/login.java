@@ -2,13 +2,12 @@ package com.dpt.demo;
 
 import java.sql.Connection;
 import java.sql.DriverManager;
+import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
-import java.sql.Statement;
-
-import javax.websocket.Session;
 
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.stereotype.Controller;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestMethod;
@@ -25,25 +24,24 @@ public class login {
 
 	@Value("${spring.datasource.password}")
 	private String DBpassword;
+	private final BCryptPasswordEncoder passwordEncoder = new BCryptPasswordEncoder();
 
-	private String userId = "";
-
-	private String errorMessage="";
-	
 	@RequestMapping(value = "login", method = RequestMethod.POST)
 	public ModelAndView login(String userName, String password) throws ClassNotFoundException {
 
-		
-		Class.forName("com.mysql.jdbc.Driver");
-		// validate user credentials
-		String query = "select * from Employee where username='" + userName + "' and password='"+password+"'";
+		String userId = "";
+		String errorMessage = "";
+		Class.forName("com.mysql.cj.jdbc.Driver");
+		String query = "select * from Employee where username = ?";
 		try (Connection con = DriverManager.getConnection(url, DBusername, DBpassword);
-				Statement st = con.createStatement();
-				ResultSet rs = st.executeQuery(query)) {
-			if (rs.next()) {
+				PreparedStatement st = con.prepareStatement(query)) {
+			st.setString(1, userName);
+			try (ResultSet rs = st.executeQuery()) {
+			if (rs.next() && passwordEncoder.matches(password, rs.getString("password"))) {
 				System.out.println(
 						rs.getString(1) + " " + rs.getString(2) + " " + rs.getString(3) + " " + rs.getString(4));
 				userId = rs.getString(4);
+			}
 			}
 		} catch (SQLException ex) {
 			System.out.println(ex.getMessage());
@@ -51,7 +49,7 @@ public class login {
 		}
 
 		ModelAndView mv;
-		if (userId != "")
+		if (!userId.isEmpty())
 		{			
 			mv = new ModelAndView("user");
 			mv.addObject("username", userId);

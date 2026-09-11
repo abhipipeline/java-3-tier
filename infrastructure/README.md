@@ -24,7 +24,7 @@ Usage
 1. Initialize Terraform
 
 ```bash
-terraform init
+terraform init -backend-config="bucket=your-tfstate-bucket"
 ```
 
 2. Create a terraform.tfvars file with at least:
@@ -33,7 +33,6 @@ terraform init
 gcp_project    = "your-gcp-project"
 gcp_region     = "us-central1"
 gcp_zone       = "us-central1-a"
-state_bucket   = "your-tfstate-bucket"
 db_password    = "your-db-password"
 ```
 
@@ -46,4 +45,4 @@ terraform apply tfplan
 
 Notes
 
-- Ensure the GCS bucket specified by `state_bucket` exists and Terraform service account has access to it.
+- Ensure the GCS bucket passed to `terraform init -backend-config` exists and the Terraform service account has access to it.

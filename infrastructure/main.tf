@@ -7,7 +7,6 @@ terraform {
     }
   }
   backend "gcs" {
-    bucket = var.state_bucket
     prefix = "java-app/terraform.tfstate"
   }
 }
@@ -53,8 +52,12 @@ module "cloudsql" {
   instance_name = "${var.environment}-java-app-sql"
   db_version = var.db_version
   db_tier    = var.db_tier
+  db_name    = "UserDB"
   db_user    = var.db_username
   db_password = var.db_password
+  network    = module.network.network_self_link
+
+  depends_on = [module.network]
 }
 
 output "gke_endpoint" {
@@ -63,4 +66,8 @@ output "gke_endpoint" {
 
 output "cloudsql_connection_name" {
   value = module.cloudsql.connection_name
+}
+
+output "cloudsql_private_ip" {
+  value = module.cloudsql.private_ip
 }
