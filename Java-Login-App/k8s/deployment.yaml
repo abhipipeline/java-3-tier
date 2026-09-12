@@ -14,13 +14,13 @@ spec:
     spec:
       containers:
         - name: java-login-app
-          image: IMAGE_PLACEHOLDER
+          image: us-central1-docker.pkg.dev/java-multi-tier/java-login/java-login-app:latest
           ports:
             - name: http
               containerPort: 8080
           env:
             - name: DB_URL
-              value: jdbc:mysql://CLOUD_SQL_PRIVATE_IP:3306/UserDB
+              value: jdbc:mysql://10.172.0.3:3306/UserDB
             - name: DB_USERNAME
               valueFrom:
                 secretKeyRef:
