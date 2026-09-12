@@ -1,7 +1,8 @@
 resource "google_sql_database_instance" "db_instance" {
-  name             = var.instance_name
-  project          = var.gcp_project
-  region           = var.gcp_region
+  name                = var.instance_name
+  project             = var.gcp_project
+  region              = var.gcp_region
+  deletion_protection = false
 
   database_version = var.db_version
 
